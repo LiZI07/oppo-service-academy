@@ -8,7 +8,7 @@ const require=createRequire(new URL('../app/session-panel.tsx',import.meta.url))
 const code=ts.transpileModule(fs.readFileSync('app/session-panel.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React,esModuleInterop:true}}).outputText;
 new Function('module','exports','require',code)(mod,mod.exports,require);
 const {AccountMenu,AccountProfile,SIGN_IN,SIGN_OUT}=mod.exports;
-assert.equal(SIGN_IN,'/signin-with-chatgpt?return_to=%2F');assert.equal(SIGN_OUT,'/signout-with-chatgpt?return_to=%2Flogin');
+assert.equal(SIGN_IN,'/auth/sign-in?return_to=%2F');assert.equal(SIGN_OUT,'/auth/sign-out');
 const admin={id:'test',name:'Admin',email:'admin@example.test',role:'admin',active:1,store:'VPC'};
 const adminHtml=renderToStaticMarkup(React.createElement(AccountMenu,{me:admin,lang:0}));
 assert(adminHtml.includes('Quản lý tài khoản'));assert(adminHtml.includes('Mở menu tài khoản'));assert(adminHtml.includes('href="'+SIGN_OUT+'"'));assert(adminHtml.includes('target="_top"'));

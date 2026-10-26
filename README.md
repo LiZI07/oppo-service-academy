@@ -36,13 +36,19 @@ pnpm build
 
 `check` kiểm tra TypeScript, API với SQLite trong bộ nhớ, phân quyền, quyền chấm kỳ thi, chia sẻ kết quả, tài khoản và cơ chế đóng xác thực khi chưa cấu hình. GitHub Actions đã được khai báo để chạy các kiểm tra và build sau khi push; cần xem kết quả thực trên GitHub sau khi tạo repo.
 
-## Trạng thái triển khai
+## Triển khai nội bộ bằng Cloudflare
 
-Ứng dụng dùng Vinext, React, Cloudflare D1 và R2. Bản ban đầu chạy trên Sites với đăng nhập ChatGPT. **Đưa code lên GitHub không tự tạo đăng nhập độc lập hoặc chuyển dữ liệu sang hosting mới.**
+Đã bổ sung đăng nhập bằng email qua Cloudflare Access cho giai đoạn tối đa 50 tài khoản; nhân viên không cần ChatGPT. Máy chủ kiểm tra chữ ký và quyền của Access trước giao diện, API và tài nguyên tĩnh. Chưa cấu hình thì đóng truy cập.
 
-Bản xuất đã bỏ ID triển khai và email Admin cá nhân. `AUTH_PROVIDER` mặc định chưa bật; API dữ liệu cần đăng nhập sẽ từ chối truy cập. Email Admin ban đầu được cấu hình qua `BOOTSTRAP_ADMIN_EMAIL`, sau khi có xác thực tin cậy.
+Dùng Workers Free, D1 và R2 private trong hạn mức. R2 cần subscription và có thể tính phí khi vượt mức miễn phí. Xem [DEPLOYMENT.md](DEPLOYMENT.md) để tạo tài nguyên, bảo vệ link, tạo Admin và theo dõi chi phí; [HANDOFF.md](HANDOFF.md) cho chi tiết nghiệp vụ.
 
-Xem [DEPLOYMENT.md](DEPLOYMENT.md) để triển khai và [HANDOFF.md](HANDOFF.md) cho nghiệp vụ, phân quyền, kiểm tra và việc cần nghiệm thu.
+```bash
+pnpm cloudflare:check
+pnpm cloudflare:migrate
+pnpm cloudflare:deploy
+```
+
+Các lệnh cần cấu hình tài khoản Cloudflare thật; mã nguồn không kèm token hoặc tài nguyên đang chạy. File mẫu là `cloudflare.config.example.json`, bản điền thật `cloudflare.config.json` được Git bỏ qua. Chế độ Sites cũ chỉ dùng sau ingress đáng tin cậy của Sites.
 
 ## Bố cục mã nguồn
 

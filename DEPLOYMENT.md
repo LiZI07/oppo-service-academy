@@ -1,67 +1,102 @@
-# Triển khai và bàn giao
+# Triển khai OPPO Service Academy trên Cloudflare
 
-## Repository và bản đang chạy
+Phương án giai đoạn đầu: tối đa 50 tài khoản, truy cập online bằng link, email đăng nhập do Cloudflare Access xác thực, ứng dụng dùng Workers + D1 + R2. Không cần tài khoản ChatGPT khi dùng phương án Cloudflare này.
 
-Đây là bản xuất mã nguồn để quản lý riêng tư bằng GitHub. Việc chuẩn bị bản xuất không đổi URL, repository nguồn, quyền chia sẻ hoặc dữ liệu website Sites đang chạy. Lịch sử Git mới không chứa cấu hình triển khai gốc hay email Admin cá nhân.
+## Đã có trong mã nguồn
 
-GitHub Actions chỉ cài thư viện theo lockfile, kiểm tra TypeScript, chạy kiểm tra nghiệp vụ và build; chưa tự deploy. Kiểm tra local không thay thế kết quả CI thực trên GitHub.
+- Xác thực Access JWT bằng jose: kiểm tra chữ ký RS256, issuer, audience, hạn dùng, sub và email; từ chối service token và header danh tính tự gửi.
+- Cổng xác thực chạy trước cả giao diện, API, trang preview và tài nguyên tĩnh. Thiếu cấu hình thì trả 503, thiếu/token sai trả 401.
+- Giao diện đăng nhập/đăng xuất VN/CN/EN, hồ sơ tài khoản và quyền ứng dụng giữ nguyên.
+- Cấu hình triển khai mẫu, kiểm tra cấu hình, lệnh build/deploy/migrate và migration bổ sung index cho truy vấn theo phạm vi.
+- Code có thể build và kiểm tra local; tài khoản hạ tầng, tài nguyên thật và nghiệm thu người dùng thật vẫn cần hoàn tất riêng.
 
-## Chọn hướng hosting
+## Chi phí và giới hạn
 
-| Hướng | Công việc |
+Các hạn mức được kiểm tra ngày 26/10/2026, cần kiểm tra dashboard trước khi sử dụng:
+
+| Thành phần | Mức miễn phí / điều kiện |
 | --- | --- |
-| Tiếp tục Sites | Gắn source qua luồng Sites hỗ trợ, cấu hình project của chính bạn, giữ ingress xác thực của nền tảng, cấp quyền Site và tạo hồ sơ nhân viên riêng |
-| Hosting công ty | Cấu hình Worker, D1, R2 của công ty; thay xác thực Sites bằng SSO hoặc phiên đăng nhập do máy chủ kiểm chứng; cấu hình domain, vận hành và sao lưu |
+| Workers Free | 100.000 request/ngày, kèm giới hạn CPU và tài nguyên của Free |
+| D1 Free | Tổng 5 GB; 5 triệu hàng đọc/ngày, 100.000 hàng ghi/ngày |
+| Access Free | Tối đa 50 người dùng, gồm cả Admin, VPC và quản lý |
+| R2 Standard | 10 GB-tháng; 1 triệu thao tác Class A, 10 triệu Class B/tháng |
 
-Không triển khai lên Worker công khai rồi bật tin cậy header `oai-authenticated-user-*`. Header này chỉ đáng tin sau ingress Sites đã xác thực và loại bỏ dữ liệu giả do khách tự gửi; host thông thường không có lớp đó.
+R2 cần kích hoạt subscription qua checkout; dùng vượt hạn mức có thể bị tính phí. Không có bảo đảm miễn phí vô hạn hoặc giới hạn chi phí cứng cho R2 trong mã nguồn. Không tự nâng gói, nhập thông tin thanh toán hay chấp nhận subscription thay người phụ trách. Dùng file nén, theo dõi dung lượng và số thao tác; hạn mức có sẵn của tài khoản có thể được dùng chung với ứng dụng khác.
 
-## Cấu hình
+## 1. Tạo hạ tầng trong tài khoản Cloudflare của người phụ trách
 
-| Tên | Ý nghĩa |
-| --- | --- |
-| `DB` | Binding D1 chứa members, documents và events |
-| `BUCKET` | R2 riêng tư, tải file qua API kiểm tra quyền |
-| `AUTH_PROVIDER` | Bỏ trống/disabled: không nhận danh tính; sites-trusted-proxy: chỉ sau ingress Sites đáng tin hoặc mock loopback khi phát triển |
-| `BOOTSTRAP_ADMIN_EMAIL` | Email đã xác thực để tạo Admin ban đầu khi chưa có hồ sơ; bỏ trống thì không tự tạo Admin |
+1. Đăng nhập Cloudflare, giữ Workers ở gói Free. Không cần mua domain cho giai đoạn thử nghiệm vì có link workers.dev.
+2. Tạo D1 tên `oppo-service-academy`, ghi lại database ID. Dùng database mới, không ghi đè DB đang chạy.
+3. Người phụ trách xem và hoàn tất điều kiện R2 subscription nếu chấp nhận; tạo bucket `oppo-service-academy-private`. Giữ bucket private, không bật r2.dev/public domain.
+4. Bật Zero Trust Free. Chuẩn bị team domain, ví dụ `https://ten-team.cloudflareaccess.com`.
 
-Bootstrap không tự nâng vai trò tài khoản đã tồn tại. Gỡ cấu hình bootstrap sau khi tạo và kiểm tra Admin. Không có mật khẩu mặc định hay API bỏ qua phân quyền.
+## 2. Cấu hình riêng cho triển khai
 
-Copy `.dev.vars.example` sang `.dev.vars` khi cần thử luồng local. Mock của bộ khởi tạo chỉ hoạt động trên loopback. Preview các vai trò không cần đăng nhập. Không dùng máy chủ dev cho sản xuất.
+Copy `cloudflare.config.example.json` thành `cloudflare.config.json`, điền:
 
-## Đưa repository lên GitHub
+- `d1_databases[0].database_id`: D1 ID thật.
+- `r2_buckets[0].bucket_name`: bucket riêng tư đã tạo.
+- `vars.ACCESS_TEAM_DOMAIN`: HTTPS team domain, không thêm dấu / cuối.
+- `vars.ACCESS_AUD`: AUD 64 ký tự của ứng dụng Access, sau bước bảo vệ bên dưới.
 
-Khi đã kết nối tài khoản GitHub có quyền tạo repo, dùng repository riêng tư tên `oppo-service-academy`. Không tạo repo công khai vì có tài liệu nội bộ. Nếu tự dùng GitHub CLI đã đăng nhập, chạy trong thư mục mã nguồn:
+`cloudflare.config.json` bị Git bỏ qua. Không đưa token, email bootstrap hoặc thông tin thanh toán vào repository.
 
 ```bash
-gh repo create oppo-service-academy --private --source=. --remote=origin --push
+pnpm cloudflare:check
+pnpm cloudflare:migrate
+pnpm cloudflare:build
+pnpm cloudflare:deploy
 ```
 
-Chỉ dùng lệnh này khi repo chưa tồn tại và thư mục hiện tại là bản xuất riêng, không phải checkout Sites. Sau đó kiểm tra visibility private, nhánh main và kết quả Actions. Lệnh này chưa được chạy trong bước chuẩn bị.
+`migrate` áp dụng cả 0000 và 0001 qua D1 migrations. `deploy` luôn build lại và kiểm tra cấu hình sinh ra trước khi gửi lên. Không sửa migration 0000 đã áp dụng. Trước chuyển dữ liệu thật cần kế hoạch sao lưu/khôi phục D1 và R2 riêng.
 
-## Các bước hosting độc lập
+## 3. Bảo vệ link bằng Access trước khi mở cho nhân viên
 
-1. Chọn tài khoản công ty và người phụ trách hạ tầng/xác thực. Tách môi trường thử nghiệm và chính thức.
-2. Thay `app/chatgpt-auth.ts`: máy chủ kiểm tra phiên/token hoặc assertion SSO, trả về ID ổn định và email đã xác minh. Cập nhật đăng nhập/đăng xuất trong `app/session-panel.tsx` và trang login. Không nhận vai trò từ trình duyệt.
-3. Cấu hình Worker và binding `DB`, `BUCKET` thật. Vite hiện dùng database ID và bucket local; repo chưa chứa tài nguyên Cloudflare thật.
-4. Áp dụng `drizzle/0000_previous_rictor.sql` qua migration lên D1 mới. Nếu chuyển dữ liệu cũ, xuất/nhập D1 và R2 riêng có kiểm soát; source repo không có dữ liệu này. Không dùng lệnh phá dữ liệu lên DB đang chạy.
-5. Cấu hình email Admin ban đầu, đăng nhập bằng danh tính đã xác thực, kiểm tra rồi gỡ bootstrap.
-6. Tạo tài khoản, trainer, cửa hàng, phạm vi từng người và chỉ định người chấm từng trainee/kỳ thi. Tạo hồ sơ không tự gửi thư mời hoặc cấp quyền nền tảng.
-7. Nghiệm thu một cửa hàng với tài khoản thật: học/ghi nhật ký, upload bằng điện thoại, trainer duyệt, người được giao chấm, người khác xem kết quả, thu hồi quyền.
-8. Chốt domain, sao lưu/khôi phục D1 và R2, thời hạn lưu dữ liệu, người vận hành và tải dự kiến trước khi mở rộng.
+Trong Workers & Pages, chọn Worker → Access hoặc Settings → Domains & Routes → Enable Cloudflare Access. Bảo vệ Worker production; preview_urls hiện được tắt.
 
-## Quy tắc cần giữ khi phát triển
+- Chính sách Allow chỉ gồm email đã được phê duyệt, lúc đầu chỉ email người phụ trách. Không chọn Everyone hoặc Bypass cho tài liệu nội bộ.
+- Bật One-time PIN để người được phép nhận mã qua email; có thể chọn IdP công ty nếu công ty đã cấu hình.
+- Lấy Application Audience (AUD) Tag, đưa vào cấu hình và deploy lại.
+- Nếu cần tạo Worker/Access trước khi có AUD, chỉ tạo Worker trống để lấy hostname và cấu hình Access. Không upload bản ứng dụng bỏ cổng xác thực để vượt bước này.
+- Kiểm tra cửa sổ chưa đăng nhập phải hiện cổng Access hoặc bị chặn; không được đọc trang preview, ảnh quy trình hay file JS riêng của app.
 
-- Điểm 100; LV1 >=90, thực hành >90 với 20 tiêu chí x 5 điểm.
-- Chỉ assessorId hiện hành được ghi điểm; assignmentRevision phải kiểm tra trong điều kiện ghi SQL để chặn lưu sau khi đã đổi người chấm.
-- Kết quả công bố chia sẻ trong phạm vi; không lộ nháp/lịch sử nháp. Ghi chú trainee riêng tư.
-- Kiểm tra quyền đọc/ghi/file ở máy chủ, không chỉ ẩn nút.
-- Archive/restore giữ lịch sử khóa học; dữ liệu preview không được dùng làm kết quả chính thức.
-- Học liệu, ngân hàng đề và ngưỡng nguồn còn mơ hồ cần người phụ trách duyệt.
+Mã nguồn chủ động kiểm tra JWT kể cả khi một hostname khác vô tình trỏ tới Worker. `assets.run_worker_first=true` bắt buộc và được kiểm tra trước triển khai. Không bật `AUTH_PROVIDER=sites-trusted-proxy` trên Cloudflare độc lập.
+
+## 4. Tạo Admin và tài khoản nhân viên
+
+Đặt Worker secret `BOOTSTRAP_ADMIN_EMAIL` thành đúng email người phụ trách, qua mục Variables and Secrets hoặc lệnh tương tác:
+
+```bash
+pnpm exec wrangler secret put BOOTSTRAP_ADMIN_EMAIL --config cloudflare.config.json
+```
+
+Không đặt giá trị trên dòng lệnh hoặc trong chat. Sau khi email đó được Access xác thực, mở app để tạo Admin trên DB mới. Kiểm tra đăng nhập, rồi gỡ secret bootstrap; tài khoản Admin đã tạo vẫn được giữ lại. Bootstrap không nâng vai trò tài khoản đã tồn tại.
+
+Admin tạo/nhập hồ sơ nhân viên bằng đúng email Access, gán vai trò, store, trainer và phạm vi; sau đó phân người chấm từng trainee/kỳ thi. Hồ sơ ứng dụng và quyền ở cổng Access là hai bước riêng; không tự gửi thư mời hoặc tự cấp quyền theo tên người trong tài liệu.
+
+## 5. Tự động triển khai từ GitHub, nếu dùng Cloudflare Workers Builds
+
+Chỉ kết nối repo private `LiZI07/oppo-service-academy` với Cloudflare sau khi chủ tài khoản cho phép quyền đó. Chọn nhánh main, build command `pnpm run check`, deploy command `pnpm cloudflare:deploy`.
+
+Trong build variables đặt `ACADEMY_D1_ID`, `ACADEMY_R2_BUCKET`, `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`. Script tạo cấu hình local từ mẫu khi chưa có `cloudflare.config.json`. Đặt `BOOTSTRAP_ADMIN_EMAIL` trong Worker runtime secrets, không phải build variables. Mỗi lần đổi các build variables, tạo lại bản build mới.
+
+Nếu dashboard yêu cầu build command có build output, dùng `pnpm cloudflare:build` rồi deploy command `pnpm exec wrangler deploy --config dist/server/wrangler.json`.
+
+## 6. Nghiệm thu trước khi mở rộng
+
+- Đăng nhập thật bằng email Admin và một tài khoản trainee/trainer/VPC trong phạm vi.
+- Học, ghi chú, gửi ảnh từ điện thoại, trainer duyệt, người được chỉ định chấm, người khác chỉ xem kết quả.
+- Thu hồi Access và khóa hồ sơ ứng dụng; kiểm tra phiên đang mở mất quyền khi yêu cầu dữ liệu tiếp theo.
+- Kiểm tra upload/download private R2, sao lưu/khôi phục D1/R2 và số request/CPU/rows read khi vận hành thực tế.
+
+Các bài kiểm tra tự động không thay thế thử thiết bị điện thoại, tải thực hoặc đăng nhập email qua Cloudflare thật. Chưa có đồng bộ O-learning/GCSM hay quyết định nhân sự tự động.
 
 ## Tài liệu chính thức
 
-- [Cloudflare Workers](https://developers.cloudflare.com/workers/framework-guides/)
-- [D1 migrations](https://developers.cloudflare.com/d1/reference/migrations/)
-- [R2](https://developers.cloudflare.com/r2/)
-- [GitHub Actions checkout](https://github.com/actions/checkout)
-- [GitHub Actions setup-node](https://github.com/actions/setup-node)
+- [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/)
+- [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/)
+- [R2 pricing](https://developers.cloudflare.com/r2/pricing/)
+- [R2 subscription](https://developers.cloudflare.com/r2/get-started/)
+- [Access plans](https://www.cloudflare.com/plans/zero-trust-services/)
+- [Protect Workers with Access](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)
+- [Validate Access JWTs](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/)

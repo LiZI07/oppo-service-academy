@@ -72,3 +72,12 @@ Validation expanded: SQL-backed route suite covers six roles, default-deny manag
 - New exam UI shows assignment, due date, Can assess/View only, Admin assignment editor, checkpoint navigation, premium results cards and group rubric bars. Updated team hero and precise SVG rings; decorative charts removed. Preview includes fictional Leader, individual assignments and shared published results; never seeds real account data.
 - Operational setup reports missing individual exam assignments in addition to account/course gaps. Existing Site audience stays owner-private.
 - Expanded integration suite verifies shared final visibility across all specified roles, non-assignee draft privacy/history redaction, unassigned Admin denial, assignment-revision checks, atomic reassignment guard and audit integrity, retained final results after revocation and per-user read receipts. Browser QA uses read-only sample identities. Real employee sign-in and phone hardware remain unverified.
+
+
+## Cloudflare standalone deployment update (authoritative for GitHub)
+
+User selected an initial maximum of 50 accounts. Added Cloudflare Access identity through jose RS256 verification, exact configured issuer/AUD, expiry/nbf and employee identity claims. Worker entrypoint gates all production routes and static assets before render/asset lookup; generated config forces ASSETS/run_worker_first. Unconfigured deployment closes access. Sites legacy identity remains an explicit compatibility option and is rejected by standalone deployment validation.
+
+Native /auth/sign-in and /auth/sign-out dispatch to the selected gateway; account/help text now uses approved email rather than requiring ChatGPT. Cloudflare gateway allowlisting remains separate from app membership. No passwords, invitations, new employees, Cloudflare resources or subscriptions are automatically created by this code change.
+
+cloudflare.config.example.json plus cloudflare scripts support validated local setup and Workers Builds variables. Template values must be replaced before deployment. Bootstrap admin email is a runtime secret; it is not committed. Added additive 0001 migration for document/audit lookup indexes, synchronized with Drizzle schema and migration metadata. tests/access-auth.test.mjs uses real RSA signatures and verifies expired/forged/wrong-audience tokens, private assets and pages, gateway identity, safe redirects/logout and deployment guards. Real Cloudflare login, R2 round-trip, phone hardware, restore and full-team load still need acceptance after hosting connection.

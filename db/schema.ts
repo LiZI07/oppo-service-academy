@@ -1,4 +1,4 @@
-import {sqliteTable,text,integer} from 'drizzle-orm/sqlite-core';
+import {sqliteTable,text,integer,index} from 'drizzle-orm/sqlite-core';
 export const members=sqliteTable('members',{id:text('id').primaryKey(),authId:text('auth_id').unique(),email:text('email').notNull().unique(),name:text('name').notNull(),role:text('role').notNull(),store:text('store').notNull().default(''),trainer:text('trainer'),hire:text('hire').notNull().default(''),active:integer('active').notNull().default(1)});
-export const documents=sqliteTable('documents',{id:text('id').primaryKey(),kind:text('kind').notNull(),owner:text('owner').notNull(),data:text('data').notNull(),revision:integer('revision').notNull().default(1),updated:text('updated').notNull()});
-export const events=sqliteTable('events',{id:text('id').primaryKey(),actor:text('actor').notNull(),subject:text('subject').notNull(),action:text('action').notNull(),data:text('data').notNull(),at:text('at').notNull()});
+export const documents=sqliteTable('documents',{id:text('id').primaryKey(),kind:text('kind').notNull(),owner:text('owner').notNull(),data:text('data').notNull(),revision:integer('revision').notNull().default(1),updated:text('updated').notNull()},t=>[index('documents_kind_owner_updated').on(t.kind,t.owner,t.updated)]);
+export const events=sqliteTable('events',{id:text('id').primaryKey(),actor:text('actor').notNull(),subject:text('subject').notNull(),action:text('action').notNull(),data:text('data').notNull(),at:text('at').notNull()},t=>[index('events_subject_at').on(t.subject,t.at)]);

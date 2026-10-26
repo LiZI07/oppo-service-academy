@@ -13,6 +13,7 @@ const code = ts.transpileModule(fs.readFileSync('app/chatgpt-auth.ts', 'utf8'), 
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
 }).outputText;
 const require = (name) => {
+  if (name === './lib/access-token') return {accessIdentity: async () => null};
   if (name === 'cloudflare:workers') return {env};
   if (name === 'next/headers') return {headers: async () => requestHeaders};
   if (name === 'next/navigation') return {redirect: (to) => {throw Error(to)}};

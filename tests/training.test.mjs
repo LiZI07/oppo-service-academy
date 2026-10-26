@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';import path from 'node:path';import vm from 'node:vm';import ts from 'typescript';import {DatabaseSync} from 'node:sqlite';import * as policy from '../app/lib/policy.mjs';
-const sqlite=new DatabaseSync(':memory:');sqlite.exec(fs.readFileSync('drizzle/0000_previous_rictor.sql','utf8'));
+const sqlite=new DatabaseSync(':memory:');for(const file of fs.readdirSync('drizzle').filter(x=>x.endsWith('.sql')).sort())sqlite.exec(fs.readFileSync('drizzle/'+file,'utf8'));
 class Stmt{constructor(sql,args=[]){this.sql=sql;this.args=args}bind(...args){return new Stmt(this.sql,args)}async first(){return sqlite.prepare(this.sql).get(...this.args)||null}async all(){return {results:sqlite.prepare(this.sql).all(...this.args)}}async run(){const r=sqlite.prepare(this.sql).run(...this.args);return {meta:{changes:Number(r.changes)}}}}
 const DB={prepare:s=>new Stmt(s),async batch(stmts){sqlite.exec('BEGIN');try{const out=[];for(const s of stmts)out.push(await s.run());sqlite.exec('COMMIT');return out}catch(e){sqlite.exec('ROLLBACK');throw e}}};
 let who=null;const images=new Map();const env={BOOTSTRAP_ADMIN_EMAIL:'owner@example.test',DB,BUCKET:{async put(id,bytes,meta){images.set(id,{body:bytes,meta})},async get(id){return images.get(id)}}};const cache=new Map();
