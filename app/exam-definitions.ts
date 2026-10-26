@@ -1,0 +1,4 @@
+export const stages=['week1','month1','kpi30','lv1','practical','kpi45','kpi90','follow90'];
+export const stageNames:Record<string,string[]>={week1:['Tuần đầu','首周考核','Week 1'],month1:['Tháng đầu','首月考核','Month 1'],lv1:['O-ELITE LV1','O-ELITE LV1','O-ELITE LV1'],practical:['Thực hành','实操考试','Practical'],kpi30:['KPI tháng 1','首月KPI','Month-1 KPIs'],kpi45:['KPI ngày 45','第45天KPI','Day-45 KPIs'],kpi90:['KPI ngày 90','第90天KPI','Day-90 KPIs'],follow90:['Theo dõi ngày 90','第90天跟踪','Day-90 follow-up']};
+export const stageDays:Record<string,number>={week1:7,month1:30,lv1:45,practical:45,kpi30:30,kpi45:45,kpi90:90,follow90:90};
+export function getResult(data:any,stage:string){return data.docs?.find((r:any)=>stage.startsWith('kpi')?r.kind==='kpi'&&r.data.stage===Number(stage.slice(3)):r.kind==='assessment'&&r.data.type===stage)}

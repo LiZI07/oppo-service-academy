@@ -1,0 +1,9 @@
+# Local development only. Copy to .dev.vars; never commit actual values.
+# Default: private APIs stay signed out; /preview contains fictional data.
+AUTH_PROVIDER="disabled"
+BOOTSTRAP_ADMIN_EMAIL=""
+
+# Loopback-only local Sites mock may be enabled explicitly for development:
+# AUTH_PROVIDER="sites-trusted-proxy"
+# BOOTSTRAP_ADMIN_EMAIL="seedy@sites.test"
+# Never use mock identity or trust raw headers on a public Worker.

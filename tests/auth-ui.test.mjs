@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+import {createRequire} from 'node:module';
+import React from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+const require=createRequire(new URL('../app/session-panel.tsx',import.meta.url)),mod={exports:{}};
+const code=ts.transpileModule(fs.readFileSync('app/session-panel.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React,esModuleInterop:true}}).outputText;
+new Function('module','exports','require',code)(mod,mod.exports,require);
+const {AccountMenu,AccountProfile,SIGN_IN,SIGN_OUT}=mod.exports;
+assert.equal(SIGN_IN,'/signin-with-chatgpt?return_to=%2F');assert.equal(SIGN_OUT,'/signout-with-chatgpt?return_to=%2Flogin');
+const admin={id:'test',name:'Admin',email:'admin@example.test',role:'admin',active:1,store:'VPC'};
+const adminHtml=renderToStaticMarkup(React.createElement(AccountMenu,{me:admin,lang:0}));
+assert(adminHtml.includes('Quản lý tài khoản'));assert(adminHtml.includes('Mở menu tài khoản'));assert(adminHtml.includes('href="'+SIGN_OUT+'"'));assert(adminHtml.includes('target="_top"'));
+const trainerHtml=renderToStaticMarkup(React.createElement(AccountMenu,{me:{...admin,role:'trainer'},lang:2}));assert(trainerHtml.includes('Account management'));assert(!trainerHtml.includes('My account'));assert(trainerHtml.includes('Sign out'));
+const anonymous=renderToStaticMarkup(React.createElement(AccountMenu,{lang:2}));assert(anonymous.includes('href="'+SIGN_IN+'"'));assert(!anonymous.includes('href="'+SIGN_OUT+'"'));
+const preview=renderToStaticMarkup(React.createElement(AccountMenu,{me:admin,readOnly:true,lang:0}));assert(!preview.includes('href="'+SIGN_OUT+'"'));assert(preview.includes('disabled'));
+const profile=renderToStaticMarkup(React.createElement(AccountProfile,{data:{me:admin},lang:0}));assert(profile.includes('admin@example.test'));assert(profile.includes('Mở quản lý tài khoản'));assert(profile.includes('href="'+SIGN_OUT+'"'));
+for(const role of ['store_manager','regional_supervisor']){const html=renderToStaticMarkup(React.createElement(AccountProfile,{data:{me:{...admin,role}},lang:0}));assert(html.includes(role==='store_manager'?'Cửa hàng trưởng':'Giám sát khu vực'));assert(!html.includes('Mở quản lý tài khoản'))}
+console.log('PASS: native sign-in/sign-out anchors, top-level navigation, Admin management shortcut, trainer restrictions, anonymous state, read-only preview and account profile.');

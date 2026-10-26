@@ -1,0 +1,24 @@
+import {env} from 'cloudflare:workers';
+import {getChatGPTUser} from '../chatgpt-auth';
+import {canSee,courseCan,visibleRecord} from './policy.mjs';
+export const db=()=>{if(!env.DB)throw Error('Database unavailable');return env.DB};
+export const json=(data:any,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
+export const now=()=>new Date().toISOString();
+export function fail(message:string,status=400):never{throw Object.assign(new Error(message),{status})}
+export async function identity(){const user=await getChatGPTUser();if(!user)fail('SIGN_IN_REQUIRED',401);const d=db();let me:any=await d.prepare('SELECT * FROM members WHERE auth_id=?').bind(user.userId).first();const email=user.email.toLowerCase(),bootstrapEmail=env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();if(!me){let invited:any=await d.prepare('SELECT * FROM members WHERE email=? AND auth_id IS NULL').bind(email).first();if(invited){await d.prepare('UPDATE members SET auth_id=? WHERE id=? AND auth_id IS NULL').bind(user.userId,invited.id).run();me=await d.prepare('SELECT * FROM members WHERE auth_id=?').bind(user.userId).first()}else if(!!bootstrapEmail&&email===bootstrapEmail){await d.prepare('INSERT OR IGNORE INTO members(id,auth_id,email,name,role,store,hire,active) VALUES(?,?,?,?,?,?,?,1)').bind(user.userId,user.userId,email,user.displayName,'admin','Admin','').run();me=await d.prepare('SELECT * FROM members WHERE auth_id=?').bind(user.userId).first()}}if(!me||!me.active)fail('ACCOUNT_NOT_ASSIGNED',403);
+const rights=await doc('rights:'+me.id);me.rights=rights?.data||{stages:[],createCourse:false};me.courseRights={};for(const acl of await rows('courseAcl')){const grant=acl.data.grants?.find((g:any)=>g.memberId===me.id);if(grant)me.courseRights[acl.data.course]=grant}me.examAssignments=Object.fromEntries((await rows('examAssignment')).filter((r:any)=>r.data.assessorId===me.id).map((r:any)=>[r.owner+':'+r.data.stage,true]));return me}
+
+export async function subject(actor:any,id?:string){const target:any=await db().prepare('SELECT * FROM members WHERE id=?').bind(id||actor.id).first();if(!canSee(actor,target))fail('FORBIDDEN',403);return target}
+export async function doc(id:string){const r:any=await db().prepare('SELECT * FROM documents WHERE id=?').bind(id).first();return r?{...r,data:JSON.parse(r.data)}:null}
+export async function write(actor:any,id:string,kind:string,owner:string,data:any,revision?:number,guard?:{id:string;revision:number;assessorId:string}){
+ const old=await doc(id),at=now();if(old&&revision!==old.revision||!old&&revision)fail('VERSION_CONFLICT',409);
+ const condition=guard?" AND EXISTS (SELECT 1 FROM documents AS exam WHERE exam.id=? AND exam.revision=? AND json_extract(exam.data,'$.assessorId')=?)":'',guardArgs=guard?[guard.id,guard.revision,guard.assessorId]:[];
+ const statement=old?db().prepare('UPDATE documents SET data=?,revision=revision+1,updated=? WHERE id=? AND revision=?'+condition).bind(JSON.stringify(data),at,id,revision,...guardArgs):db().prepare('INSERT INTO documents(id,kind,owner,data,revision,updated) SELECT ?,?,?,?,1,? WHERE 1=1'+condition).bind(id,kind,owner,JSON.stringify(data),at,...guardArgs);
+ const event=db().prepare('INSERT INTO events(id,actor,subject,action,data,at) SELECT ?,?,?,?,?,? WHERE changes()>0').bind(crypto.randomUUID(),actor.id,owner,kind,JSON.stringify({id,previous:old?.data??null,next:data}),at);
+ const res=await db().batch([statement,event]);if(!res[0].meta.changes)fail(guard?'EXAM_ASSIGNMENT_CHANGED':'VERSION_CONFLICT',409);return doc(id);
+}
+export async function rows(kind:string,owner?:string){const r=owner?await db().prepare('SELECT * FROM documents WHERE kind=? AND owner=? ORDER BY updated DESC').bind(kind,owner).all():await db().prepare('SELECT * FROM documents WHERE kind=? ORDER BY updated DESC').bind(kind).all();return r.results.map((x:any)=>({...x,data:JSON.parse(x.data)}))}
+export async function checkOrigin(req:Request){const origin=req.headers.get('origin');if(origin&&new URL(origin).origin!==new URL(req.url).origin)fail('FORBIDDEN_ORIGIN',403);if(req.headers.get('sec-fetch-site')==='cross-site')fail('FORBIDDEN_ORIGIN',403)}
+
+export async function accessibleCourse(actor:any,id:string){const course=await doc(id);if(course?.kind!=='course')fail('NOT_FOUND',404);if(actor.role!=='admin'&&((course.data.archived&&!['edit','upload','publish'].some(k=>courseCan(actor,id,k)))||(!course.data.published&&!Object.values(actor.courseRights?.[id]||{}).some(v=>v===true))))fail('FORBIDDEN',403);return course}
+export async function courseReview(actor:any,target:any,courseId:string){await accessibleCourse(actor,courseId);if(actor.role==='admin'||courseCan(actor,courseId,'assess'))return;const acl=await doc('acl:'+courseId);if((actor.role==='trainer'&&target.trainer===actor.id||actor.role==='store_manager'&&canSee(actor,target))&&acl?.data.trainerAssess!==false)return;fail('COURSE_ASSESS_REQUIRED',403)}
