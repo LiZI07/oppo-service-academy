@@ -76,7 +76,7 @@ Admin tạo/nhập hồ sơ nhân viên bằng đúng email Access, gán vai tr�
 
 ## 5. Tự động triển khai từ GitHub, nếu dùng Cloudflare Workers Builds
 
-Chỉ kết nối repo private `LiZI07/oppo-service-academy` với Cloudflare sau khi chủ tài khoản cho phép quyền đó. Chọn nhánh main, build command `pnpm run check`, deploy command `pnpm cloudflare:deploy`.
+Chỉ kết nối repo private `LiZI07/oppo-service-academy` với Cloudflare sau khi chủ tài khoản cho phép quyền đó. Chọn nhánh main, build command `pnpm run check`, deploy command `pnpm cloudflare:migrate && pnpm cloudflare:deploy`.
 
 Trong build variables đặt `ACADEMY_D1_ID`, `ACADEMY_R2_BUCKET`, `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`. Script tạo cấu hình local từ mẫu khi chưa có `cloudflare.config.json`. Đặt `BOOTSTRAP_ADMIN_EMAIL` trong Worker runtime secrets, không phải build variables. Mỗi lần đổi các build variables, tạo lại bản build mới.
 
@@ -100,3 +100,18 @@ Các bài kiểm tra tự động không thay thế thử thiết bị điện t
 - [Access plans](https://www.cloudflare.com/plans/zero-trust-services/)
 - [Protect Workers with Access](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)
 - [Validate Access JWTs](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/)
+
+## Academy email and password sign-in (staged migration)
+
+The new password provider is opt-in. Existing builds still default to `cloudflare-access` so publishing this change cannot silently remove the current identity boundary.
+
+1. Keep Access enabled. Deploy using `pnpm cloudflare:migrate && pnpm cloudflare:deploy`; migration `0002_password_auth.sql` adds credential/session/reset/rate-limit tables without changing training records or member IDs. The build token needs D1 Write/Edit permission for remote migrations.
+2. Sign in as the existing Admin. Open **Account management → My profile → Password & security**, set a private password (at least 15 characters), and confirm it saves. Do not put passwords in source, build variables, logs or chat. This preserves the Admin's existing `auth_id` and all scoped records.
+3. Set build variable `ACADEMY_AUTH_PROVIDER=password`, retain the existing four D1/R2/Access build variables, and rebuild with the same migration/deploy command. An explicit local config instead needs `vars.AUTH_PROVIDER=password`. Build variables do not override a pre-existing local config file.
+4. Only after the password build succeeds and the Admin password exists, remove the *outer Worker Access protection* using the Cloudflare dashboard. Do not make the R2 bucket public. `/login` and the exact login/reset/logout endpoints become public; all other application pages, bundles, APIs and files remain gated by Academy's session and existing role permissions. `/preview` returns 404 in password mode.
+5. In a fresh browser session, verify the branded `/login`, Admin login, logout, wrong-password rejection and a scoped trainee account. Check Workers CPU/error telemetry before team rollout: secure scrypt can exceed the Free plan's CPU budget. Local workerd integration passing is not proof that a production Free invocation fits. Do not reduce password hashing strength to hide a limit; if the free tier is insufficient, retain Access or arrange an approved authentication host/plan before switching.
+6. Admin creates member profiles, then edits each profile to generate a **one-use password setup link**. Share privately after verifying the employee, outside this app. Links expire after 30 minutes. No invitation/reset email is automatically sent. The public **Forgot password?** control explains the Admin-assisted recovery flow; it does not pretend to send an email.
+
+Sessions use random 256-bit opaque tokens in Secure, HttpOnly, SameSite=Lax cookies; only SHA-256 token digests are persisted. Standard sessions expire after 12 hours; Remember me sessions after 7 days. Credentials use salted scrypt (N=32768,r=8,p=3). Credential changes require the current password after the initial verified Access setup and revoke existing sessions. Reset links are one-use, version-bound and stored only as digests. Login has persistent IP/account throttling, same-origin checks, bounded JSON bodies and generic invalid-credential errors. No public registration or automatic email-based role assignment is provided.
+
+Rollback before staff onboarding: restore `ACADEMY_AUTH_PROVIDER=cloudflare-access`, rebuild and restore Worker Access protection using the existing team/AUD/application. Retain the added tables; do not delete existing staff or training data.

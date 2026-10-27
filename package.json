@@ -13,12 +13,13 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/training.test.mjs && node tests/auth-ui.test.mjs && node tests/identity-gate.test.mjs && node tests/access-auth.test.mjs",
+    "test": "node tests/training.test.mjs && node tests/auth-ui.test.mjs && node tests/identity-gate.test.mjs && node tests/access-auth.test.mjs && node tests/password-auth.test.mjs",
     "check": "pnpm run typecheck && pnpm test",
     "cloudflare:check": "node scripts/cloudflare.mjs check",
     "cloudflare:build": "node scripts/cloudflare.mjs build",
     "cloudflare:deploy": "node scripts/cloudflare.mjs deploy",
-    "cloudflare:migrate": "node scripts/cloudflare.mjs migrate"
+    "cloudflare:migrate": "node scripts/cloudflare.mjs migrate",
+    "test:worker-auth": "node tests/password-worker.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

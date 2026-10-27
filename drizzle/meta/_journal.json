@@ -15,6 +15,13 @@
       "when": 1792998901654,
       "tag": "0001_lookup_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793070747174,
+      "tag": "0002_password_auth",
+      "breakpoints": true
     }
   ]
 }

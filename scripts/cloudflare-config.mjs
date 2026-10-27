@@ -5,7 +5,7 @@ export function validateCloudflareConfig(config) {
   if (!config.compatibility_flags?.includes('nodejs_compat')) errors.push('nodejs_compat is required.');
   if (config.preview_urls !== false) errors.push('Keep preview_urls=false until preview Access protection is configured.');
   if (config.assets?.run_worker_first !== true || config.assets?.binding !== 'ASSETS') errors.push('Private assets require ASSETS and run_worker_first=true.');
-  if (config.vars?.AUTH_PROVIDER !== 'cloudflare-access') errors.push('Standalone deployment requires AUTH_PROVIDER=cloudflare-access.');
+  if (!['cloudflare-access','password'].includes(config.vars?.AUTH_PROVIDER)) errors.push('Standalone deployment requires a supported authentication provider.');
   if (!/^https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com$/.test(config.vars?.ACCESS_TEAM_DOMAIN || '')) errors.push('Set the exact HTTPS Access team domain.');
   if (!/^[a-f0-9]{64}$/.test(config.vars?.ACCESS_AUD || '')) errors.push('Set the 64-character Access application AUD.');
   const db = config.d1_databases?.find(d => d.binding === 'DB');

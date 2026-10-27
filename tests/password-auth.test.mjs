@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';import path from 'node:path';import vm from 'node:vm';import ts from 'typescript';import * as nodeCrypto from 'node:crypto';import {DatabaseSync} from 'node:sqlite';
+const sqlite=new DatabaseSync(':memory:');for(const f of fs.readdirSync('drizzle').filter(x=>x.endsWith('.sql')).sort())sqlite.exec(fs.readFileSync('drizzle/'+f,'utf8'));
+class Statement{constructor(sql,args=[]){this.sql=sql;this.args=args}bind(...args){return new Statement(this.sql,args)}async first(){return sqlite.prepare(this.sql).get(...this.args)||null}async run(){return {meta:{changes:Number(sqlite.prepare(this.sql).run(...this.args).changes)}}}}
+const db={prepare:sql=>new Statement(sql),async batch(stmts){sqlite.exec('BEGIN');try{const out=[];for(const s of stmts)out.push(await s.run());sqlite.exec('COMMIT');return out}catch(e){sqlite.exec('ROLLBACK');throw e}}};
+const env={DB:db,AUTH_PROVIDER:'cloudflare-access'},actor={id:'admin',role:'admin'},cache=new Map();
+function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(file);const m={exports:{}};const require=name=>{if(name==='node:crypto')return nodeCrypto;if(name==='cloudflare:workers')return {env};if(name==='../../lib/server')return {identity:async()=>actor,db:()=>db,json:(b,s=200)=>Response.json(b,{status:s}),checkOrigin:async()=>{},fail:(message,status=400)=>{throw Object.assign(Error(message),{status})}};if(name.endsWith('access-token'))return {accessIdentity:async()=>null,accessSettings:()=>null};return load(path.resolve(path.dirname(file),name)+'.ts')};const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;vm.runInNewContext(code,{module:m,exports:m.exports,require,Buffer,crypto,TextDecoder,Date,Headers,Request,Response,URL,JSON,console});cache.set(file,m.exports);return m.exports}
+const auth=load('app/lib/password-auth.ts'),settings=load('app/api/password/route.ts'),gate=load('worker/private-gateway.ts').privateGateway;
+const password='Correct horse battery training 2026!';const headers={origin:'https://academy.test','content-type':'application/json','cf-connecting-ip':'192.0.2.1'};
+function req(route,body,overrides={}){return new Request('https://academy.test'+route,{method:'POST',headers:{...headers,...overrides},body:JSON.stringify(body)})}
+const call=(route,body,overrides)=>auth.passwordEndpoint(req(route,body,overrides),env);
+const clear=()=>sqlite.exec('DELETE FROM academy_auth_limits');
+sqlite.prepare('INSERT INTO members(id,email,name,role,active,auth_id) VALUES(?,?,?,?,?,?)').run('admin','owner@example.test','Owner','admin',1,'cf-access:original');
+sqlite.prepare('INSERT INTO members(id,email,name,role,active) VALUES(?,?,?,?,?)').run('trainee','trainee@example.test','Trainee','trainee',1);
+assert(!auth.validPassword('short'));assert(auth.validPassword(password));
+let r=await settings.POST(req('/api/password',{action:'change',password}));assert.equal(r.status,200);assert(!sqlite.prepare('SELECT password_hash FROM academy_credentials').get().password_hash.includes(password));
+const stored=sqlite.prepare('SELECT password_hash FROM academy_credentials').get().password_hash;
+assert(await auth.passwordMatches(password,stored));assert(!await auth.passwordMatches('wrong',stored));assert.notEqual(await auth.passwordHash(password),stored,'Each hash has a fresh salt');
+assert.equal((await call('/api/auth/login',{email:'owner@example.test',password},{origin:'https://evil.test'})).status,403);
+assert.equal((await call('/api/auth/login',{email:'owner@example.test',password:'wrong'})).status,401);
+assert.equal((await call('/api/auth/login',{email:'absent@example.test',password:'wrong'})).status,401);
+r=await call('/api/auth/login',{email:' Owner@Example.test ',password,remember:true});assert.equal(r.status,200);
+const cookie=r.headers.get('set-cookie');for(const flag of ['__Host-academy_session=','HttpOnly','Secure','SameSite=Lax','Max-Age=604800'])assert(cookie.includes(flag));const requestHeaders=new Headers({cookie:cookie.split(';')[0]});
+let me=await auth.passwordIdentity(requestHeaders,env);assert.equal(me.userId,'cf-access:original');assert.equal(me.email,'owner@example.test');
+const session=sqlite.prepare('SELECT token_hash FROM academy_sessions').get().token_hash;assert(!cookie.includes(session),'Only the session digest is persisted');
+sqlite.prepare('UPDATE members SET active=0 WHERE id=?').run('admin');assert.equal(await auth.passwordIdentity(requestHeaders,env),null);sqlite.prepare('UPDATE members SET active=1 WHERE id=?').run('admin');
+assert.equal((await settings.POST(req('/api/password',{action:'change',password:'Another secure passphrase 2026!',currentPassword:'wrong'}))).status,403);
+clear();r=await settings.POST(req('/api/password',{action:'resetLink',memberId:'trainee',currentPassword:password}));assert.equal(r.status,200);const link=await r.json(),reset=new URLSearchParams(new URL(link.url).hash.slice(1)).get('reset');assert(!sqlite.prepare('SELECT token_hash FROM academy_reset_tokens').get().token_hash.includes(reset));
+assert.equal((await call('/api/auth/reset',{token:reset,password:'short'})).status,400);
+assert.equal((await call('/api/auth/reset',{token:reset,password})).status,200);
+assert.equal((await call('/api/auth/reset',{token:reset,password})).status,400,'Reset is single-use');
+r=await call('/api/auth/login',{email:'trainee@example.test',password});assert.equal(r.status,200);assert(!r.headers.get('set-cookie').includes('Max-Age='));
+const traineeHeaders=new Headers({cookie:r.headers.get('set-cookie').split(';')[0]});assert.equal((await auth.passwordIdentity(traineeHeaders,env)).userId,'password:trainee');
+actor.id='trainee';actor.role='trainee';assert.equal((await settings.POST(req('/api/password',{action:'resetLink',memberId:'admin',currentPassword:password}))).status,403);actor.id='admin';actor.role='admin';
+clear();r=await settings.POST(req('/api/password',{action:'change',currentPassword:password,password:'New secure training passphrase 2026!'}));assert.equal(r.status,200);assert.equal(await auth.passwordIdentity(requestHeaders,env),null,'Changing password invalidates old sessions');
+clear();for(let i=0;i<8;i++)assert.equal((await call('/api/auth/login',{email:'none@example.test',password:'wrong'})).status,401);assert.equal((await call('/api/auth/login',{email:'none@example.test',password:'wrong'})).status,429);
+env.AUTH_PROVIDER='password';r=await gate(new Request('https://academy.test/login'),env);assert.equal(r.status,200);assert((await r.text()).includes('id="login-form"'));
+assert.equal((await gate(new Request('https://academy.test/'),env)).status,303);assert.equal((await gate(new Request('https://academy.test/api/training'),env)).status,401);assert.equal((await gate(new Request('https://academy.test/preview?role=admin'),env)).status,404);assert.equal(await gate(new Request('https://academy.test/',{headers:traineeHeaders}),env),null);
+r=await auth.revokeSession(new Request('https://academy.test/auth/sign-out',{headers:traineeHeaders}),env);assert.equal(r.status,303);assert(r.headers.get('set-cookie').includes('Max-Age=0'));assert.equal(await auth.passwordIdentity(traineeHeaders,env),null);
+console.log('PASS: salted scrypt, preserved Admin identity, email/password login, same-origin checks, persistent/session cookies, disabled accounts, password reauthentication, Admin-only one-use setup links, reset replay denial, password/session revocation, brute-force limits, public login and private data/preview gate.');

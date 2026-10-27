@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import {passwordIdentity} from './lib/password-auth';
 import {accessIdentity} from './lib/access-token';
 
 export type ChatGPTUser = {
@@ -21,6 +22,7 @@ const SIGN_OUT_PATH = "/signout-with-chatgpt";
 const CALLBACK_PATH = "/callback";
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
+  if (env.AUTH_PROVIDER === 'password') return passwordIdentity(await headers(), env);
   if (env.AUTH_PROVIDER === 'cloudflare-access') return accessIdentity(await headers(), env);
   // Sites strips client identity headers at its trusted ingress. A generic
   // Worker does not; keep authentication closed until that boundary exists.

@@ -1,3 +1,4 @@
+import {revokeSession} from '../../lib/password-auth';
 import {env} from 'cloudflare:workers';
 import {chatGPTSignOutPath} from '../../chatgpt-auth';
 export const dynamic = 'force-dynamic';
@@ -5,6 +6,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   if (request.headers.get('sec-fetch-site') === 'cross-site') return new Response(null, {status: 403});
   if (request.headers.has('next-router-prefetch') || /prefetch/i.test(request.headers.get('purpose') || request.headers.get('sec-purpose') || '')) return new Response(null, {status: 204});
+  if (env.AUTH_PROVIDER === 'password') return revokeSession(request, env);
   const target = env.AUTH_PROVIDER === 'cloudflare-access' ? '/cdn-cgi/access/logout' :
     env.AUTH_PROVIDER === 'sites-trusted-proxy' ? chatGPTSignOutPath('/login') : null;
   if (!target) return new Response('Authentication is not configured.', {status: 503});

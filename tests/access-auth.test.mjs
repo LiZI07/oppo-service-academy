@@ -4,6 +4,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import ts from 'typescript';
 import * as jose from 'jose';
+import * as nodeCrypto from 'node:crypto';
 import {validateCloudflareConfig} from '../scripts/cloudflare-config.mjs';
 
 const {privateKey, publicKey} = await jose.generateKeyPair('RS256', {extractable: true});
@@ -24,6 +25,7 @@ function load(filename) {
   if (cache.has(filename)) return cache.get(filename);
   const module = {exports: {}};
   const require = name => {
+    if (name === 'node:crypto') return nodeCrypto;
     if (name === 'jose') return jose;
     if (name === 'cloudflare:workers') return {env};
     if (name === 'next/headers') return {headers: async () => requestHeaders};

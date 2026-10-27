@@ -1,6 +1,6 @@
 declare namespace Cloudflare {
   interface Env {
-    AUTH_PROVIDER?: "disabled" | "sites-trusted-proxy" | "cloudflare-access";
+    AUTH_PROVIDER?: "disabled" | "sites-trusted-proxy" | "cloudflare-access" | "password";
     ACCESS_TEAM_DOMAIN?: string;
     ACCESS_AUD?: string;
     ASSETS?: Fetcher;

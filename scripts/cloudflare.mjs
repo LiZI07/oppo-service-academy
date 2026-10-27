@@ -10,6 +10,7 @@ const configPath = resolve(process.env.ACADEMY_DEPLOY_CONFIG || 'cloudflare.conf
 // The generated local file is ignored by Git; runtime secrets stay in Workers.
 if (!existsSync(configPath) && !process.env.ACADEMY_DEPLOY_CONFIG && process.env.ACADEMY_D1_ID) {
   const generated = JSON.parse(readFileSync('cloudflare.config.example.json', 'utf8'));
+  generated.vars.AUTH_PROVIDER = process.env.ACADEMY_AUTH_PROVIDER || 'cloudflare-access';
   generated.vars.ACCESS_TEAM_DOMAIN = process.env.ACCESS_TEAM_DOMAIN || '';
   generated.vars.ACCESS_AUD = process.env.ACCESS_AUD || '';
   generated.d1_databases[0].database_id = process.env.ACADEMY_D1_ID;
