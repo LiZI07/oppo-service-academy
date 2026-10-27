@@ -4,7 +4,7 @@ export const SESSION_COOKIE='__Host-academy_session';
 const seconds=()=>Math.floor(Date.now()/1000);
 export const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
 export const token=()=>randomBytes(32).toString('base64url');
-export function validPassword(value:unknown):value is string{return typeof value==='string'&&Array.from(value).length>=15&&value.length<=128}
+export function validPassword(value:unknown):value is string{return typeof value==='string'&&Array.from(value).length>=8&&value.length<=128}
 function derive(password:string,salt:string):Promise<Buffer>{return new Promise((resolve,reject)=>scrypt(password,salt,32,{N:32768,r:8,p:3,maxmem:48*1024*1024},(error,key)=>error?reject(error):resolve(key)))}
 export async function passwordHash(password:string){const salt=randomBytes(16).toString('hex');return 'scrypt:32768:8:3:'+salt+':'+(await derive(password,salt)).toString('hex')}
 export async function passwordMatches(password:string,stored:string){const parts=stored.split(':');if(parts.length!==6||parts.slice(0,4).join(':')!=='scrypt:32768:8:3'||! /^[a-f0-9]{32}$/.test(parts[4])||! /^[a-f0-9]{64}$/.test(parts[5]))return false;const actual=await derive(password,parts[4]);return timingSafeEqual(actual,Buffer.from(parts[5],'hex'))}

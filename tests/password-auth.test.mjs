@@ -6,13 +6,13 @@ const db={prepare:sql=>new Statement(sql),async batch(stmts){sqlite.exec('BEGIN'
 const env={DB:db,AUTH_PROVIDER:'cloudflare-access'},actor={id:'admin',role:'admin'},cache=new Map();
 function load(file){file=path.resolve(file);if(cache.has(file))return cache.get(file);const m={exports:{}};const require=name=>{if(name==='node:crypto')return nodeCrypto;if(name==='cloudflare:workers')return {env};if(name==='../../lib/server')return {identity:async()=>actor,db:()=>db,json:(b,s=200)=>Response.json(b,{status:s}),checkOrigin:async()=>{},fail:(message,status=400)=>{throw Object.assign(Error(message),{status})}};if(name.endsWith('access-token'))return {accessIdentity:async()=>null,accessSettings:()=>null};return load(path.resolve(path.dirname(file),name)+'.ts')};const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;vm.runInNewContext(code,{module:m,exports:m.exports,require,Buffer,crypto,TextDecoder,Date,Headers,Request,Response,URL,JSON,console});cache.set(file,m.exports);return m.exports}
 const auth=load('app/lib/password-auth.ts'),settings=load('app/api/password/route.ts'),gate=load('worker/private-gateway.ts').privateGateway;
-const password='Correct horse battery training 2026!';const headers={origin:'https://academy.test','content-type':'application/json','cf-connecting-ip':'192.0.2.1'};
+const password='Academy8';const headers={origin:'https://academy.test','content-type':'application/json','cf-connecting-ip':'192.0.2.1'};
 function req(route,body,overrides={}){return new Request('https://academy.test'+route,{method:'POST',headers:{...headers,...overrides},body:JSON.stringify(body)})}
 const call=(route,body,overrides)=>auth.passwordEndpoint(req(route,body,overrides),env);
 const clear=()=>sqlite.exec('DELETE FROM academy_auth_limits');
 sqlite.prepare('INSERT INTO members(id,email,name,role,active,auth_id) VALUES(?,?,?,?,?,?)').run('admin','owner@example.test','Owner','admin',1,'cf-access:original');
 sqlite.prepare('INSERT INTO members(id,email,name,role,active) VALUES(?,?,?,?,?)').run('trainee','trainee@example.test','Trainee','trainee',1);
-assert(!auth.validPassword('short'));assert(auth.validPassword(password));
+assert(!auth.validPassword('short'));assert(!auth.validPassword('1234567'));assert(auth.validPassword('12345678'));assert(auth.validPassword('技术培训八个字符'));assert(!auth.validPassword('x'.repeat(129)));assert(auth.validPassword(password));
 let r=await settings.POST(req('/api/password',{action:'change',password}));assert.equal(r.status,200);assert(!sqlite.prepare('SELECT password_hash FROM academy_credentials').get().password_hash.includes(password));
 const stored=sqlite.prepare('SELECT password_hash FROM academy_credentials').get().password_hash;
 assert(await auth.passwordMatches(password,stored));assert(!await auth.passwordMatches('wrong',stored));assert.notEqual(await auth.passwordHash(password),stored,'Each hash has a fresh salt');
