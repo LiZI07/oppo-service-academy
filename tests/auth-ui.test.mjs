@@ -13,7 +13,7 @@ assert.equal(SIGN_IN,'/auth/sign-in?return_to=%2F');assert.equal(SIGN_OUT,'/auth
 const admin={id:'test',name:'Admin',email:'admin@example.test',role:'admin',active:1,store:'VPC'};
 const adminHtml=renderToStaticMarkup(React.createElement(AccountMenu,{me:admin,lang:0}));
 assert(adminHtml.includes('Quản lý tài khoản'));assert(adminHtml.includes('Mở menu tài khoản'));assert(adminHtml.includes('href="'+SIGN_OUT+'"'));assert(adminHtml.includes('target="_top"'));
-const trainerHtml=renderToStaticMarkup(React.createElement(AccountMenu,{me:{...admin,role:'trainer'},lang:2}));assert(trainerHtml.includes('Account management'));assert(!trainerHtml.includes('My account'));assert(trainerHtml.includes('Sign out'));
+const trainerHtml=renderToStaticMarkup(React.createElement(AccountMenu,{me:{...admin,role:'trainer'},lang:2}));assert(!trainerHtml.includes('Account management'));assert(trainerHtml.includes('My account'));assert(trainerHtml.includes('Sign out'));
 const anonymous=renderToStaticMarkup(React.createElement(AccountMenu,{lang:2}));assert(anonymous.includes('href="'+SIGN_IN+'"'));assert(!anonymous.includes('href="'+SIGN_OUT+'"'));
 const preview=renderToStaticMarkup(React.createElement(AccountMenu,{me:admin,readOnly:true,lang:0}));assert(!preview.includes('href="'+SIGN_OUT+'"'));assert(preview.includes('disabled'));
 const profile=renderToStaticMarkup(React.createElement(AccountProfile,{data:{me:admin},lang:0}));assert(profile.includes('admin@example.test'));assert(profile.includes('Mở quản lý tài khoản'));assert(profile.includes('href="'+SIGN_OUT+'"'));

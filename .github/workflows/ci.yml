@@ -31,5 +31,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Check types and application permissions
         run: pnpm run check
+      - name: Verify real Worker authentication and all roles
+        run: pnpm run test:worker-auth
       - name: Build application
         run: pnpm build

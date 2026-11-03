@@ -19,7 +19,7 @@
     "cloudflare:build": "node scripts/cloudflare.mjs build",
     "cloudflare:deploy": "node scripts/cloudflare.mjs deploy",
     "cloudflare:migrate": "node scripts/cloudflare.mjs migrate",
-    "test:worker-auth": "node tests/password-worker.test.mjs"
+    "test:worker-auth": "node tests/password-worker.test.mjs && node tests/role-login-worker.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -5,7 +5,7 @@ import {privateGateway} from './private-gateway';
 
 const worker = {
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
-    if (!import.meta.env.DEV) {
+    if (!import.meta.env.DEV || env.AUTH_PROVIDER === 'password') {
       const denied = await privateGateway(request, env);
       if (denied) return denied;
     }
@@ -39,7 +39,12 @@ const worker = {
         },
       };
     }
-    return runWithConnectorBinding(binding, () => handler.fetch(request, env, ctx));
+    const response = await runWithConnectorBinding(binding, () => handler.fetch(request, env, ctx));
+    const privateResponse = new Response(response.body, response);
+    privateResponse.headers.set('Cache-Control', 'private, no-store');
+    privateResponse.headers.set('X-Robots-Tag', 'noindex, nofollow');
+    privateResponse.headers.set('X-Content-Type-Options', 'nosniff');
+    return privateResponse;
   },
 };
 

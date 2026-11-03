@@ -115,3 +115,37 @@ The new password provider is opt-in. Existing builds still default to `cloudflar
 Sessions use random 256-bit opaque tokens in Secure, HttpOnly, SameSite=Lax cookies; only SHA-256 token digests are persisted. Standard sessions expire after 12 hours; Remember me sessions after 7 days. Credentials use salted scrypt (N=32768,r=8,p=3). Credential changes require the current password after the initial verified Access setup and revoke existing sessions. Reset links are one-use, version-bound and stored only as digests. Login has persistent IP/account throttling, same-origin checks, bounded JSON bodies and generic invalid-credential errors. No public registration or automatic email-based role assignment is provided.
 
 Rollback before staff onboarding: restore `ACADEMY_AUTH_PROVIDER=cloudflare-access`, rebuild and restore Worker Access protection using the existing team/AUD/application. Retain the added tables; do not delete existing staff or training data.
+
+## Bản hoàn thiện đăng nhập và quản lý tài khoản — 03/11/2026
+
+### Trạng thái và điều kiện chuyển sang email + mật khẩu
+
+Bản thay đổi này **không tự gỡ Cloudflare Access**, không đổi audience của Site, không công khai R2 và không tạo lại database. Địa chỉ hiện hữu là `https://oppo-service-academy.lyquocvi2002.workers.dev`. Kiểm tra ngày 03/11/2026: người chưa xác thực vẫn được chuyển tới Cloudflare Access. Môi trường thực hiện chưa có quyền đăng nhập/deploy Cloudflare nên không được coi bản build local là bản production đã triển khai.
+
+Trình tự tiếp tục sau khi chủ tài khoản đăng nhập Cloudflare:
+
+1. Kiểm tra Worker đang gắn đúng D1/R2 và các migrations hiện có. Giữ `AUTH_PROVIDER=cloudflare-access` trong lần cập nhật đầu; áp dụng `0002` nếu chưa có, deploy bản mới.
+2. Admin hiện hữu mở **Quản lý tài khoản → Tài khoản của tôi → Mật khẩu & bảo mật**, tự đặt mật khẩu riêng nếu chưa có. Xác nhận credential tồn tại, không thay `members.id`, `auth_id` hoặc tạo Admin thay thế.
+3. Chuyển build variable `ACADEMY_AUTH_PROVIDER=password` (hoặc cấu hình local tương đương) rồi build/deploy. Giữ lớp Access trong khi kiểm chứng session gate, API, bundle và tệp riêng tư.
+4. Muốn hiện ngay form email + mật khẩu ở URL thật cần điều chỉnh lớp Access ngoài cùng. Đây là thay đổi ranh giới xác thực; chỉ thực hiện sau khi người dùng xác nhận cụ thể. Không đặt policy Everyone/Bypass cho nội dung Academy. Không mở audience công khai của Site.
+5. Đo CPU và lỗi đăng nhập trên tài khoản Free trước khi tuyên bố phương án miễn phí đáp ứng. Workers Free có ngân sách CPU 10 ms/request; scrypt cấu hình hiện tại có thể vượt ngân sách. Không hạ độ mạnh băm mật khẩu để đạt hạn mức. Nếu không phù hợp, giữ Access và dừng chuyển đổi để thống nhất phương án xác thực miễn phí khác.
+
+Tài liệu giới hạn: https://developers.cloudflare.com/workers/platform/limits/
+
+### Giao diện và onboarding
+
+- Mở ứng dụng chưa đăng nhập dẫn tới `/login` trong chế độ password; chỉ form đăng nhập và API login/reset/logout được phục vụ cho người chưa đăng nhập.
+- Không còn chọn vai trò/view. Vai trò lấy từ tài khoản thật và kiểm tra ở mỗi API.
+- Admin có bốn mục: **Danh sách tài khoản / Tạo nhiều tài khoản / Phân quyền / Tài khoản của tôi**. Người khác chỉ có **Tài khoản của tôi**.
+- Mục **Tạo nhiều tài khoản** hỗ trợ tải mẫu có ví dụ, chọn file, dán CSV, xem đủ danh sách và báo lỗi theo dòng. Tối đa 50 hồ sơ được ghi nguyên khối; một dòng sai không tạo dở danh sách.
+- **Chuẩn bị 7 tài khoản thử** tạo danh sách TEST có email riêng từng lần, gồm đủ 7 vai trò và liên kết Trainer–Trainee. Nút chỉ chuẩn bị danh sách; Admin kiểm tra quyền trước khi tạo. Các tài khoản quản lý/VPC chưa có scope hoặc quyền chấm cho tới khi Admin cấp riêng.
+- Sau khi nhập, Admin xác thực lại bằng mật khẩu của mình để cấp tối đa 50 liên kết đặt mật khẩu. Có thể tải CSV gồm email/vai trò/link/hạn dùng. Link chỉ lưu digest trong D1, dùng một lần, hết hạn sau 30 phút. Tạo lại làm mất hiệu lực link trước.
+- Thay đổi vai trò hoặc khóa tài khoản thu hồi phiên và link đặt mật khẩu cũ. Mở khóa không làm phiên cũ sống lại. Đăng xuất thu hồi session ở máy chủ và xóa cookie. Trang, API và tệp dùng `private, no-store`.
+
+### Kiểm chứng
+
+`pnpm run check`, `pnpm run test:worker-auth` và `pnpm cloudflare:build`.
+
+Bài `role-login-worker.test.mjs` chạy route nghiệp vụ thực trên workerd và D1: đăng nhập/đăng xuất đủ 7 vai trò, scope đọc hồ sơ, cấm tạo/nâng quyền trái phép, API quản trị, tệp chưa đăng nhập, nhập nguyên khối 50 hồ sơ, forward reference Trainer, 50 link mật khẩu, replay token và khóa/mở khóa không phục hồi phiên cũ. Đây là kiểm thử cô lập với tài khoản TEST; không khẳng định đã tạo chúng trong production.
+
+Browser QA: đã xác nhận giao diện `/login` và chuyển hướng người chưa đăng nhập tại preview. Kiểm thử click toàn bộ giao diện sau đăng nhập và nghiệm thu trên URL production còn chờ quyền Cloudflare/phiên đăng nhập phù hợp. Không hạ cổng bảo vệ hoặc chèn session để vượt bước này.
